@@ -2,9 +2,12 @@
 #include <stdbool.h>
 #include <unistd.h>
 
+#include "camera_config.h"
+
 void app_main(void)
 {
-    while (true) {
+    while (true) 
+    {
         printf("Hello from app_main!\n");
         sleep(1);
     }
