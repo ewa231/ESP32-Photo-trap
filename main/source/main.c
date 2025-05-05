@@ -1,17 +1,29 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <unistd.h>
+#include <string.h>
 
 #include "camera_config.h"
 #include "esp_camera.h"
+#include "esp_event.h"
+#include "nvs_flash.h"
+#include "esp_system.h"
 #include "esp_log.h"
 #include "esp_wifi.h"
+#include "wifi_pass.h" // Contains WiFi password
+
 
 static const char *TAG = "ESP32-CAM";
+
+// Event group to signal connection
+static EventGroupHandle_t wifi_event_group;
+const int WIFI_CONNECTED_BIT = BIT0;
 
 // Camera Initialization
 esp_err_t init_camera() 
 {
+	esp_err_t err = ESP_OK;
+	
     camera_config_t config =
     {
 		.ledc_channel = LEDC_CHANNEL_0,
@@ -33,51 +45,118 @@ esp_err_t init_camera()
 		.pin_pwdn = CAM_PIN_PWDN,
 		.pin_reset = CAM_PIN_RESET,
 		.xclk_freq_hz = 20000000,
-		.pixel_format = PIXFORMAT_JPEG, // Output format as JPEG
+		.pixel_format = PIXFORMAT_RGB565,
 		
 		.frame_size = FRAMESIZE_QVGA,
 		.jpeg_quality = 12,
-		.fb_count = 2,
-		.fb_location = CAMERA_FB_IN_PSRAM,
-		.grab_mode = CAMERA_GRAB_WHEN_EMPTY
+		.fb_count = 1
     };
 
-    esp_err_t err = esp_camera_init(&config);
+    err = esp_camera_init(&config);
     
     if (err != ESP_OK) 
     {
         ESP_LOGE(TAG, "Camera init failed: 0x%x", err);
-        return err;
     }
     
-    return ESP_OK;
+    return err;
 }
 
-// Connect to Wi-Fi
-void wifi_init() 
+// WiFi event handler
+static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) 
 {
-    ESP_LOGI(TAG, "Initializing WiFi...");
-    esp_netif_init();
-    esp_event_loop_create_default();
-    esp_netif_create_default_wifi_sta();
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    esp_wifi_init(&cfg);
-    wifi_config_t wifi_config = 
+    if ((WIFI_EVENT == event_base) && (WIFI_EVENT_STA_START == event_id)) 
     {
-        .sta = 
-        {
-            .ssid = WIFI_SSID,
-            .password = WIFI_PASS,
-        },
-    };
-    esp_wifi_set_mode(WIFI_MODE_STA);
-    esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config);
-    esp_wifi_start();
+        esp_wifi_connect();
+    } 
+    else if ((WIFI_EVENT == event_base) && (WIFI_EVENT_STA_DISCONNECTED == event_id)) 
+    {
+        esp_wifi_connect();
+        ESP_LOGI(TAG, "Retrying connection to WiFi...");
+    } 
+    else if ((IP_EVENT == event_base) && (IP_EVENT_STA_GOT_IP == event_id)) 
+    {
+        ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
+        ESP_LOGI(TAG, "Got IP: " IPSTR, IP2STR(&event->ip_info.ip));
+        xEventGroupSetBits(wifi_event_group, WIFI_CONNECTED_BIT);
+    }
+}
+
+void wifi_init_sta() 
+{
+    wifi_event_group = xEventGroupCreate();
+
+    // Initialize NVS
+    esp_err_t ret = nvs_flash_init();
+    
+    if ((ESP_ERR_NVS_NO_FREE_PAGES == ret) || (ESP_ERR_NVS_NEW_VERSION_FOUND == ret)) 
+    {
+      ESP_ERROR_CHECK(nvs_flash_erase());
+      ret = nvs_flash_init();
+    }
+    
+    ESP_ERROR_CHECK(ret);
+
+    // Initialize TCP/IP
+    ESP_ERROR_CHECK(esp_netif_init());
+
+    // Create default WiFi station
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    esp_netif_create_default_wifi_sta();
+
+    // Configure WiFi
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+
+    esp_event_handler_instance_t instance_any_id;
+    esp_event_handler_instance_t instance_got_ip;
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
+                                                        ESP_EVENT_ANY_ID,
+                                                        &wifi_event_handler,
+                                                        NULL,
+                                                        &instance_any_id));
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
+                                                        IP_EVENT_STA_GOT_IP,
+                                                        &wifi_event_handler,
+                                                        NULL,
+                                                        &instance_got_ip));
+
+    wifi_config_t wifi_config = {};
+    strcpy((char*)wifi_config.sta.ssid, WIFI_SSID);
+    strcpy((char*)wifi_config.sta.password, WIFI_PASS);
+
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
+    ESP_ERROR_CHECK(esp_wifi_start());
+
+    ESP_LOGI(TAG, "wifi_init_sta finished.");
+
+    // Wait for connection
+    EventBits_t bits = xEventGroupWaitBits(wifi_event_group,
+            WIFI_CONNECTED_BIT,
+            pdFALSE,
+            pdTRUE,
+            portMAX_DELAY);
+
+    if (bits & WIFI_CONNECTED_BIT) 
+    {
+        ESP_LOGI(TAG, "Connected to AP");
+    } 
+    else 
+    {
+        ESP_LOGI(TAG, "Failed to connect to AP");
+    }
 }
 
 void app_main(void)
 {
-
+	// Camera initalization
+	ESP_ERROR_CHECK(init_camera());
+    ESP_LOGI(TAG, "Camera initialized");
+    
+    // WiFi initialization
+    wifi_init_sta();
+    
     while (true) 
     {
         printf("Hello from app_main!\n");
