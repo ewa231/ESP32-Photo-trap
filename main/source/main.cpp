@@ -5,12 +5,15 @@
 
 #include "camera_config.h"
 #include "esp_camera.h"
+#include "esp_dma_utils.h"
 #include "esp_event.h"
 #include "nvs_flash.h"
 #include "esp_system.h"
 #include "esp_log.h"
 #include "esp_wifi.h"
 #include "wifi_pass.h" // Contains WiFi password
+
+#include "tensorflow/lite/micro/micro_interpreter.h"
 
 
 static const char *TAG = "ESP32-CAM";
@@ -26,30 +29,32 @@ esp_err_t init_camera()
 	
     camera_config_t config =
     {
-		.ledc_channel = LEDC_CHANNEL_0,
-		.ledc_timer = LEDC_TIMER_0,
-		.pin_d0 = CAM_PIN_D0,
-		.pin_d1 = CAM_PIN_D1,
-		.pin_d2 = CAM_PIN_D2,
-		.pin_d3 = CAM_PIN_D3,
-		.pin_d4 = CAM_PIN_D4,
-		.pin_d5 = CAM_PIN_D5,
-		.pin_d6 = CAM_PIN_D6,
-		.pin_d7 = CAM_PIN_D7,
-		.pin_xclk = CAM_PIN_XCLK,
-		.pin_pclk = CAM_PIN_PCLK,
-		.pin_vsync = CAM_PIN_VSYNC,
-		.pin_href = CAM_PIN_HREF,
-		.pin_sccb_sda = CAM_PIN_SIOD,
-		.pin_sccb_scl = CAM_PIN_SIOC,
 		.pin_pwdn = CAM_PIN_PWDN,
 		.pin_reset = CAM_PIN_RESET,
+		.pin_xclk = CAM_PIN_XCLK,
+		.pin_sccb_sda = CAM_PIN_SIOD,
+		.pin_sccb_scl = CAM_PIN_SIOC,
+		.pin_d7 = CAM_PIN_D7,
+		.pin_d6 = CAM_PIN_D6,
+		.pin_d5 = CAM_PIN_D5,
+		.pin_d4 = CAM_PIN_D4,
+		.pin_d3 = CAM_PIN_D3,
+		.pin_d2 = CAM_PIN_D2,
+		.pin_d1 = CAM_PIN_D1,
+		.pin_d0 = CAM_PIN_D0,
+		.pin_vsync = CAM_PIN_VSYNC,
+		.pin_href = CAM_PIN_HREF,
+		.pin_pclk = CAM_PIN_PCLK,
 		.xclk_freq_hz = 20000000,
+		.ledc_timer = LEDC_TIMER_0,
+		.ledc_channel = LEDC_CHANNEL_0,
 		.pixel_format = PIXFORMAT_RGB565,
-		
 		.frame_size = FRAMESIZE_QVGA,
-		.jpeg_quality = 12,
-		.fb_count = 1
+        .jpeg_quality = 12,
+		.fb_count = 1,
+		.fb_location = CAMERA_FB_IN_PSRAM,
+		.grab_mode = CAMERA_GRAB_WHEN_EMPTY,
+		.sccb_i2c_port = 1	
     };
 
     err = esp_camera_init(&config);
@@ -148,7 +153,7 @@ void wifi_init_sta()
     }
 }
 
-void app_main(void)
+extern "C" void app_main()
 {
 	// Camera initalization
 	ESP_ERROR_CHECK(init_camera());

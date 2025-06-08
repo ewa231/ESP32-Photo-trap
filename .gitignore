@@ -1,2 +1,3 @@
 /.settings/*
 /build/*
+/main/include/wifi_pass.h
