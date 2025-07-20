@@ -1,9 +1,11 @@
+#include <cstddef>
 #include <stdio.h>
 #include <stdbool.h>
 #include <unistd.h>
 #include <string.h>
 
 #include "camera_config.h"
+#include "car_model.h"
 #include "esp_camera.h"
 #include "esp_dma_utils.h"
 #include "esp_event.h"
@@ -11,16 +13,19 @@
 #include "esp_system.h"
 #include "esp_log.h"
 #include "esp_wifi.h"
-#include "wifi_pass.h" // Contains WiFi password
-
 #include "tensorflow/lite/micro/micro_interpreter.h"
-
+#include "tensorflow/lite/schema/schema_generated.h"
+#include "tensorflow/lite/micro/micro_mutable_op_resolver.h"
+#include "wifi_pass.h" // Contains WiFi password
 
 static const char *TAG = "ESP32-CAM";
 
 // Event group to signal connection
 static EventGroupHandle_t wifi_event_group;
 const int WIFI_CONNECTED_BIT = BIT0;
+
+// TFLite model
+TfLiteTensor* input = nullptr;
 
 // Camera Initialization
 esp_err_t init_camera() 
@@ -48,8 +53,8 @@ esp_err_t init_camera()
 		.xclk_freq_hz = 20000000,
 		.ledc_timer = LEDC_TIMER_0,
 		.ledc_channel = LEDC_CHANNEL_0,
-		.pixel_format = PIXFORMAT_RGB565,
-		.frame_size = FRAMESIZE_QVGA,
+		.pixel_format = PIXFORMAT_GRAYSCALE,
+		.frame_size = FRAMESIZE_96X96,
         .jpeg_quality = 12,
 		.fb_count = 1,
 		.fb_location = CAMERA_FB_IN_PSRAM,
@@ -63,6 +68,10 @@ esp_err_t init_camera()
     {
         ESP_LOGE(TAG, "Camera init failed: 0x%x", err);
     }
+    else
+    {
+		ESP_LOGI(TAG, "Camera initialized");
+	}
     
     return err;
 }
@@ -153,11 +162,48 @@ void wifi_init_sta()
     }
 }
 
+void load_model(void)
+{
+ 	constexpr int tensor_arena_size = 60 * 1024;
+    uint8_t tensor_arena[tensor_arena_size];
+    tflite::MicroInterpreter* interpreter = nullptr;
+ 	const tflite::Model* model = tflite::GetModel(trained_tflite);
+ 	
+ 	if (model->version() != TFLITE_SCHEMA_VERSION) 
+ 	{
+  		ESP_LOGI(TAG, "Model schema version mismatch!");
+    }
+
+    // Tells the interpreter what operations (like Conv2D, Relu, Softmax) it can expect
+ 	static tflite::MicroMutableOpResolver<5> micro_op_resolver;
+    micro_op_resolver.AddAveragePool2D();
+    micro_op_resolver.AddConv2D();
+    micro_op_resolver.AddDepthwiseConv2D();
+    micro_op_resolver.AddReshape();
+    micro_op_resolver.AddSoftmax();
+    
+    // Build an interpreter to run the model with
+    static tflite::MicroInterpreter static_interpreter(model, 
+                                                       micro_op_resolver, 
+                                                       tensor_arena,
+                                                       tensor_arena_size);
+    interpreter = &static_interpreter;
+    
+    // Allocate memory from the tensor_arena for the model's tensors.
+    TfLiteStatus allocate_status = interpreter->AllocateTensors();
+    if (allocate_status != kTfLiteOk)
+    {
+		ESP_LOGI(TAG, "Tensor allocation failed");
+	}
+	
+	// Get information about the memory area to use for the model's input.
+    input = interpreter->input(0);
+}
+
 extern "C" void app_main()
 {
-	// Camera initalization
-	ESP_ERROR_CHECK(init_camera());
-    ESP_LOGI(TAG, "Camera initialized");
+	// Camera initialization
+	init_camera();
     
     // WiFi initialization
     wifi_init_sta();

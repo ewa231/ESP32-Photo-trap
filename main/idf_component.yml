@@ -14,5 +14,9 @@ dependencies:
   #   # `public` flag doesn't have an effect dependencies of the `main` component.
   #   # All dependencies of `main` are public by default.
   #   public: true
-  espressif/esp32-camera: '*'
-  espressif/esp-tflite-micro: '*'
+  espressif/esp32-camera:
+    git: "https://github.com/espressif/esp32-camera.git"
+    path: "."
+  espressif/tflite-micro: 
+    git: "https://github.com/espressif/tflite-micro-esp-examples.git"
+    path: "."

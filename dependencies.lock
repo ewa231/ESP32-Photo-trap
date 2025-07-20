@@ -9,36 +9,47 @@ dependencies:
       registry_url: https://components.espressif.com/
       type: service
     version: 1.1.1
-  espressif/esp-tflite-micro:
-    component_hash: 78502e833b227ec15b917222ed046df1a46f2e5d3593d2a77a162012fa9a1aa0
+  espressif/esp32-camera:
+    component_hash: 074464fa13fdf394242e8c0db973fbb957a28fda0c6949f00738caf84b110117
     dependencies:
-    - name: espressif/esp-nn
-      registry_url: https://components.espressif.com
-      require: private
-      version: ^1.1.0
+    - name: espressif/esp_jpeg
+      public: true
+      version: ^1.3.0
+    source:
+      git: https://github.com/espressif/esp32-camera.git
+      path: .
+      type: git
+    version: ed74d59d1bc67a9f0fabd453a99ea6f0d73c09c7
+  espressif/esp_jpeg:
+    component_hash: defb83669293cbf86d0fa86b475ba5517aceed04ed70db435388c151ab37b5d7
+    dependencies:
     - name: idf
       require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.3.1
+  espressif/tflite-micro:
+    component_hash: 2a0d337899d742197130e08beeb7f14e4ced3484ae3d497f898d3106c6be3af6
+    dependencies:
+    - name: idf
       version: '>=4.4'
+    - name: espressif/esp-nn
+      version: ^1.1.0
     source:
-      registry_url: https://components.espressif.com/
-      type: service
-    version: 1.3.3~1
-  espressif/esp32-camera:
-    component_hash: c3eb05fbeeae884a23bed9b17d48d5f0da8872beadae0c0e747d2fbea6094f06
-    dependencies: []
-    source:
-      registry_url: https://components.espressif.com/
-      type: service
-    version: 2.0.15
+      git: https://github.com/espressif/tflite-micro-esp-examples.git
+      path: .
+      type: git
+    version: 772214721682ef2d3eed09cafea777edad55541f
   idf:
     source:
       type: idf
     version: 5.3.1
 direct_dependencies:
-- espressif/esp-nn
-- espressif/esp-tflite-micro
 - espressif/esp32-camera
+- espressif/tflite-micro
 - idf
-manifest_hash: 8fa8f6efe18389f5e4bc44c013c95692fdb46efd4ab97c6c2700f4d64d246421
+manifest_hash: 55934e73c1f286802fb50089f23e31165695c5251aa1bcda0a9f9286808d39aa
 target: esp32
 version: 2.0.0
